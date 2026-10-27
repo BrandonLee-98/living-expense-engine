@@ -109,7 +109,7 @@ def main():
     # --- UI SIDEBAR ---
     st.sidebar.header("1. Property Parameters")
     zip_query = st.sidebar.text_input("Enter 5-Digit ZIP Code", value="77598", max_chars=5).strip()
-    sqft_input = st.sidebar.number_input("Property Square Footage", min_value=500, max_value=10000, value=1500, step=50) # Fix 3: Step size 50
+    sqft_input = st.sidebar.number_input("Property Square Footage", min_value=500, max_value=10000, value=1500, step=50)
     occupants_input = st.sidebar.slider("Household Occupants", min_value=1, max_value=6, value=2)
 
     st.sidebar.markdown("---")
@@ -200,7 +200,6 @@ def main():
     alt_city = best_alt_data.get('city_name', 'Nearby')
     dist_miles = calc_geo_distance_miles(data.get('latitude'), data.get('longitude'), best_alt_data.get('latitude'), best_alt_data.get('longitude'))
 
-    # Fix 2: Check if target is already optimal
     is_optimal_target = (alt_zip == zip_query) or (arbitrage_type == "optimal")
 
     alt_features = features.copy()
@@ -249,17 +248,14 @@ def main():
         "🌊 Flood & MUD Risk",
         "⚡ Utility Grid Detail",
         "🎯 Budget Recommender",
-        "⚙️ ML Explainability (SHAP)",
+        "📊 ML Explainability",
         "🗺️ Phase 03 Project Roadmap"
     ])
 
     with tab1:
         st.subheader("Target vs. Alternative Component Comparison")
-        
-        # Fix 2: Handle optimal duplicate display cleanly
         if is_optimal_target:
             st.success(f"🌟 **Optimal Non-Mortgage Governance:** ZIP {zip_query} already operates on optimal municipal utilities without MUD taxes or coastal surcharges. No alternative migration required.")
-            
             comp_rows = ["Groceries & Food", "Utilities (Power/Water/Gas)"]
             target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
             if features['twia_mandatory'] == 1:
@@ -278,10 +274,7 @@ def main():
             st.table(comp_df)
         else:
             st.info(f"💡 **Arbitrage Found:** Evaluating nearby **ZIP {alt_zip} ({alt_city})** — ~{dist_miles:.1f} miles away. Total Cost: ${alt_total_cost:,.2f}")
-
-            comp_rows = [
-                "Groceries & Food", "Utilities (Power/Water/Gas)"
-            ]
+            comp_rows = ["Groceries & Food", "Utilities (Power/Water/Gas)"]
             target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
             alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}"]
 
@@ -307,7 +300,6 @@ def main():
             st.table(comp_df)
 
     with tab2:
-        # Fix 1: Explicitly display 100-yr flood zone percent and MUD/Municipal water rates
         st.subheader("Actuarial Flood Hazard & Municipal Water Governance")
         st.markdown("""
         This tab evaluates structural flood exposure and water service governance for the selected ZIP code. 
@@ -355,7 +347,6 @@ def main():
         with st.form("budget_recommender_form"):
             r_col1, r_col2 = st.columns(2)
             with r_col1:
-                # Fix 4: Change default budget start number to $1500 instead of $2500
                 max_budget = st.number_input("Maximum Monthly Budget ($)", min_value=500.0, max_value=10000.0, value=1500.0, step=100.0)
             with r_col2:
                 search_radius = st.slider("Search Radius (Miles)", min_value=1, max_value=50, value=10)
@@ -415,14 +406,77 @@ def main():
                         st.dataframe(res_df, use_container_width=True, hide_index=True)
 
     with tab4:
-        st.subheader("Model Logic & Interpretability (SHAP)")
-        st.markdown("Understand exactly how household parameters influence the ML-predicted components.")
+        st.header("📊 ML Explainability & Interpretability Hub")
+        st.markdown(
+            "Detailed global feature importance, SHAP beeswarm impacts, residual diagnostics, and performance metrics across all 5 cost targets."
+        )
+
+        st.subheader("1. Model Baseline Statistics")
+        st.markdown("""
+        Before specific household and geographical feature adjustments, the model's baseline expected monthly costs are:
+        * **Food Cost:** $1,314.46
+        * **HOA / Maintenance:** $207.06
+        * **Electricity:** $85.66
+        * **Water:** $75.25
+        * **Gas:** $24.25
+        """)
+
+        st.subheader("2. Global Feature Importance Across All Targets")
+        if os.path.exists("extracted_figures/Phase03_figures/shap_importance_all_targets.png"):
+            st.image("extracted_figures/Phase03_figures/shap_importance_all_targets.png", caption="Global Feature Importance Across All 5 Cost Targets")
+        elif os.path.exists("input_file_18.png"):
+            st.image("input_file_18.png", caption="Global Feature Importance Across All 5 Cost Targets")
+
+        st.subheader("3. Regression Performance Report Card")
+        if os.path.exists("extracted_figures/Phase03_figures/metric_summary.png"):
+            st.image("extracted_figures/Phase03_figures/metric_summary.png", caption="Regression Metrics by Cost Target (R², MAE, RMSE)")
+
+        st.subheader("4. SHAP Beeswarm Feature Impact Rankings")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            if os.path.exists("extracted_figures/Phase03_figures/shap_beeswarm_food.png"):
+                st.image("extracted_figures/Phase03_figures/shap_beeswarm_food.png", caption="Food Cost SHAP Beeswarm")
+            if os.path.exists("extracted_figures/Phase03_figures/shap_beeswarm_electricity.png"):
+                st.image("extracted_figures/Phase03_figures/shap_beeswarm_electricity.png", caption="Electricity SHAP Beeswarm")
+            if os.path.exists("extracted_figures/Phase03_figures/shap_beeswarm_water.png"):
+                st.image("extracted_figures/Phase03_figures/shap_beeswarm_water.png", caption="Water SHAP Beeswarm")
+        with col_b2:
+            if os.path.exists("extracted_figures/Phase03_figures/shap_beeswarm_gas.png"):
+                st.image("extracted_figures/Phase03_figures/shap_beeswarm_gas.png", caption="Gas SHAP Beeswarm")
+            if os.path.exists("extracted_figures/Phase03_figures/shap_beeswarm_hoa.png"):
+                st.image("extracted_figures/Phase03_figures/shap_beeswarm_hoa.png", caption="HOA / Maintenance SHAP Beeswarm")
+
+        st.subheader("5. Error Diagnostics & Residual Analysis")
+        if os.path.exists("extracted_figures/Phase03_figures/residual_histograms.png"):
+            st.image("extracted_figures/Phase03_figures/residual_histograms.png", caption="Residual Distributions Across All 5 Cost Targets")
+
+        st.markdown("#### Individual Target Diagnostics (Actual vs. Predicted & Homoscedasticity)")
+        diag_tabs = st.tabs(["Food", "Electricity", "Water", "Gas", "HOA"])
+        with diag_tabs[0]:
+            if os.path.exists("extracted_figures/Phase03_figures/diagnostics_food.png"):
+                st.image("extracted_figures/Phase03_figures/diagnostics_food.png", caption="Food Cost Diagnostics")
+        with diag_tabs[1]:
+            if os.path.exists("extracted_figures/Phase03_figures/diagnostics_electricity.png"):
+                st.image("extracted_figures/Phase03_figures/diagnostics_electricity.png", caption="Electricity Diagnostics")
+        with diag_tabs[2]:
+            if os.path.exists("extracted_figures/Phase03_figures/diagnostics_water.png"):
+                st.image("extracted_figures/Phase03_figures/diagnostics_water.png", caption="Water Diagnostics")
+        with diag_tabs[3]:
+            if os.path.exists("extracted_figures/Phase03_figures/diagnostics_gas.png"):
+                st.image("extracted_figures/Phase03_figures/diagnostics_gas.png", caption="Gas Diagnostics")
+        with diag_tabs[4]:
+            if os.path.exists("extracted_figures/Phase03_figures/diagnostics_hoa.png"):
+                st.image("extracted_figures/Phase03_figures/diagnostics_hoa.png", caption="HOA / Maintenance Diagnostics")
+
+        st.markdown("---")
+        st.subheader("6. Local Household Interpretability (Live SHAP)")
+        st.markdown("Understand exactly how your current sidebar parameters dynamically influence the ML-predicted components for this specific ZIP code scenario.")
         
         if hasattr(model, 'estimators_'):
             target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "Subdivision Maintenance / HOA"]
             for i, estimator in enumerate(model.estimators_):
                 target_name = target_names[i]
-                with st.expander(f"Feature Impact: {target_name}", expanded=(i==0)):
+                with st.expander(f"Live Feature Impact: {target_name}", expanded=(i==0)):
                     try:
                         explainer = shap.TreeExplainer(estimator)
                         shap_values = explainer.shap_values(input_df)
@@ -435,7 +489,7 @@ def main():
                     except Exception as e:
                         st.error(f"Failed to generate SHAP tree graph: {e}")
         else:
-            st.warning("The loaded model lacks underlying tree estimators for SHAP extraction.")
+            st.warning("The loaded model lacks underlying tree estimators for live local SHAP extraction.")
 
     with tab5:
         st.subheader("Project Roadmap: Phase 03 Capstone Completion")

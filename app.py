@@ -83,22 +83,12 @@ def find_nearest_arbitrage_zip(df, target_row):
     return target_row, "optimal"
 
 # ==========================================
-# 4. DETERMINISTIC TAX & INSURANCE ENGINE
+# 4. DETERMINISTIC PROPERTY TAX ENGINE
 # ==========================================
-def calculate_tax_and_insurance(sqft, tax_rate, twia_flag, flood_pct, multiplier):
-    # Estimate home value at a conservative $190/sqft for the Houston metro region
+def calculate_property_tax(sqft, tax_rate, multiplier):
     est_home_val = sqft * 190.0
-    
-    # Property Tax (Algebraic)
     monthly_tax = (est_home_val * (tax_rate / 100.0)) / 12.0
-    
-    # Home Insurance (Actuarial baseline + geographic penalties)
-    base_ins = (est_home_val / 1000.0) * 5.5 / 12.0 # ~$5.50 per $1000 of coverage annually
-    twia_surcharge = 125.0 if twia_flag == 1 else 0.0
-    flood_surcharge = (flood_pct / 100.0) * 150.0
-    monthly_ins = base_ins + twia_surcharge + flood_surcharge
-    
-    return monthly_tax * multiplier, monthly_ins * multiplier
+    return monthly_tax * multiplier
 
 # ==========================================
 # 5. MAIN APPLICATION
@@ -125,7 +115,11 @@ def main():
     occupants_input = st.sidebar.slider("Household Occupants", min_value=1, max_value=6, value=2)
 
     st.sidebar.markdown("---")
-    st.sidebar.header("2. Household Budget Profiles")
+    st.sidebar.header("2. Housing Governance & HOA")
+    include_hoa = st.sidebar.toggle("Enable Subdivision / HOA Fees", value=False, help="Toggle on if targeting housing within a managed HOA community.")
+
+    st.sidebar.markdown("---")
+    st.sidebar.header("3. Household Budget Profiles")
 
     tier_display_names = [
         "Thrifty (SNAP Baseline / Maximum Savings)",
@@ -147,13 +141,14 @@ def main():
     city_name = data.get('city_name', 'Houston Area')
     county_name = data.get('county_name', 'Unknown')
     archetype = data.get('cluster_archetype_name', 'Unclassified Region')
+    pop_growth_pct = float(data.get('five_year_pop_growth_pct', 0.0))
 
     st.sidebar.markdown("---")
-    st.sidebar.header("3. ZIP Classification Profile")
+    st.sidebar.header("4. ZIP Classification Profile")
     col1, col2 = st.sidebar.columns(2)
     col1.metric(label="City", value=city_name)
     col2.metric(label="Archetype", value=archetype)
-    st.sidebar.info("This ZIP code exhibits stable municipal infrastructure with high-density urban core characteristics, influencing baseline utility demands.")
+    st.sidebar.info(f"**5-Year Population Growth Rate:** {pop_growth_pct:+.1f}%\n\nThis ZIP code exhibits stable municipal infrastructure with high-density urban core characteristics.")
 
     # --- ML DATA PREPARATION ---
     features = {
@@ -164,7 +159,7 @@ def main():
         'water_mud_flag': int(data.get('water_mud_flag', 0)),
         'houston_cpi_food_scalar': float(data.get('houston_cpi_food_scalar', 1.0)),
         'effective_tax_rate_pct': float(data.get('effective_tax_rate_pct', 2.2)),
-        'five_year_pop_growth_pct': float(data.get('five_year_pop_growth_pct', 5.0))
+        'five_year_pop_growth_pct': pop_growth_pct
     }
 
     expected_features = ['sqft', 'occupants', 'pct_area_100yr_flood', 'twia_mandatory',
@@ -172,11 +167,10 @@ def main():
                          'five_year_pop_growth_pct']
     input_df = pd.DataFrame([features])[expected_features]
 
-    # --- PREDICTION EXECUTION (FIXED TARGET MAPPING) ---
+    # --- PREDICTION EXECUTION ---
     with st.spinner("Running XGBoost Inference..."):
         predictions = model.predict(input_df)[0]
 
-    # Model Outputs: [Food, Electricity, Water, Gas, HOA]
     ml_food = predictions[0]
     ml_elec = predictions[1]
     ml_water = predictions[2]
@@ -191,18 +185,12 @@ def main():
     }
     grocery_multiplier = tier_scalars[selected_tier_name]
 
-    # Process ML Variables
     pred_food = (ml_food * grocery_multiplier) * time_multiplier
     pred_utils = (ml_elec + ml_water + ml_gas) * time_multiplier
-    pred_hoa = ml_hoa * time_multiplier
+    pred_hoa = (ml_hoa * time_multiplier) if include_hoa else 0.0
+    pred_tax = calculate_property_tax(features['sqft'], features['effective_tax_rate_pct'], time_multiplier)
 
-    # Process Deterministic Variables
-    pred_tax, pred_ins = calculate_tax_and_insurance(
-        features['sqft'], features['effective_tax_rate_pct'], 
-        features['twia_mandatory'], features['pct_area_100yr_flood'], time_multiplier
-    )
-
-    total_cost = pred_food + pred_utils + pred_tax + pred_ins + pred_hoa
+    total_cost = pred_food + pred_utils + pred_tax + pred_hoa
 
     # --- ARBITRAGE EXECUTION ---
     best_alt_data, arbitrage_type = find_nearest_arbitrage_zip(df, data)
@@ -210,7 +198,6 @@ def main():
     alt_city = best_alt_data.get('city_name', 'Nearby')
     dist_miles = calc_geo_distance_miles(data.get('latitude'), data.get('longitude'), best_alt_data.get('latitude'), best_alt_data.get('longitude'))
 
-    # Calculate Alt Costs
     alt_features = features.copy()
     alt_features.update({
         'pct_area_100yr_flood': float(best_alt_data.get('pct_area_100yr_flood', 0.0)),
@@ -224,36 +211,35 @@ def main():
 
     alt_pred_food = (alt_preds[0] * grocery_multiplier) * time_multiplier
     alt_pred_utils = (alt_preds[1] + alt_preds[2] + alt_preds[3]) * time_multiplier
-    alt_pred_hoa = alt_preds[4] * time_multiplier
+    alt_pred_hoa = (alt_preds[4] * time_multiplier) if include_hoa else 0.0
+    alt_pred_tax = calculate_property_tax(alt_features['sqft'], alt_features['effective_tax_rate_pct'], time_multiplier)
     
-    alt_pred_tax, alt_pred_ins = calculate_tax_and_insurance(
-        alt_features['sqft'], alt_features['effective_tax_rate_pct'], 
-        alt_features['twia_mandatory'], alt_features['pct_area_100yr_flood'], time_multiplier
-    )
-    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_tax + alt_pred_ins + alt_pred_hoa
+    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_tax + alt_pred_hoa
 
     # --- RENDER DASHBOARD HEADER ---
     if features['twia_mandatory'] == 1:
-        st.warning(f"🌊 **Coastal Surcharge Notice ({city_name}):** Mandatory Texas Windstorm Insurance Association (TWIA) coverage required.")
+        st.warning(f"🌊 **Coastal Zone Designation ({city_name}):** Located within TWIA coastal policy eligibility boundary.")
     if features['pct_area_100yr_flood'] > 20.0:
         st.error(f"⚠️ **High Flood Hazard Alert ({city_name}):** {features['pct_area_100yr_flood']:.1f}% of this ZIP area lies within the 100-year floodplain.")
 
     st.subheader(f"Cost Breakdown for ZIP Code: {zip_query} | {city_name} ({archetype})")
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
     col2.metric(f"Food ({selected_tier_name.split(' ')[0]})", f"${pred_food:,.2f}")
-    col3.metric("Utilities (Elec/H2O/Gas)", f"${pred_utils:,.2f}")
-    col4.metric("Tax + Ins + HOA", f"${(pred_tax + pred_ins + pred_hoa):,.2f}")
+    col3.metric("Utilities (Power/Water/Gas)", f"${pred_utils:,.2f}")
+    col4.metric("Property Tax" + (" + HOA" if include_hoa else ""), f"${(pred_tax + pred_hoa):,.2f}")
+    col5.metric("5-Yr Pop Growth", f"{pop_growth_pct:+.1f}%")
 
     st.markdown("---")
 
     # --- DEEP DIVE TABS ---
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "💰 Itemized Breakdown & Comparison",
         "🌊 Flood & MUD Risk",
         "⚡ Utility Grid Detail",
         "🤖 ML Explainability (SHAP)",
-        "🗺️ Phase 03 Project Roadmap"
+        "🗺️ Phase 03 Project Roadmap",
+        "🎯 Budget Recommender"
     ])
 
     with tab1:
@@ -263,24 +249,25 @@ def main():
         else:
             st.info(f"💡 **Arbitrage Found:** Evaluating nearby **ZIP {alt_zip} ({alt_city})** — ~{dist_miles:.1f} miles away. Total Cost: ${alt_total_cost:,.2f}")
 
+        comp_rows = [
+            "Groceries & Food", "Utilities (Power/Water/Gas)", "Property Tax"
+        ]
+        target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}", f"${pred_tax:,.2f}"]
+        alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}", f"${alt_pred_tax:,.2f}"]
+
+        if include_hoa:
+            comp_rows.append("Optional Subdivision Dues / HOA")
+            target_vals.append(f"${pred_hoa:,.2f}")
+            alt_vals.append(f"${alt_pred_hoa:,.2f}")
+
+        comp_rows.extend(["Total Estimated Cost", "5-Year Pop Growth Rate", "100-Yr Flood Exposure", "MUD Governance"])
+        target_vals.extend([f"${total_cost:,.2f}", f"{pop_growth_pct:+.1f}%", f"{features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if features['water_mud_flag']==1 else "Standard Municipal"])
+        alt_vals.extend([f"${alt_total_cost:,.2f}", f"{float(best_alt_data.get('five_year_pop_growth_pct', 0.0)):+.1f}%", f"{alt_features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if alt_features['water_mud_flag']==1 else "Standard Municipal"])
+
         comp_df = pd.DataFrame({
-            "Cost / Metric": [
-                "Groceries & Food", "Utilities (Power/Water/Gas)",
-                "Property Tax", "Home/TWIA Insurance", "HOA / Maintenance",
-                "Total Estimated Cost", "100-Yr Flood Exposure", "MUD Governance"
-            ],
-            f"Target: {zip_query} ({city_name})": [
-                f"${pred_food:,.2f}", f"${pred_utils:,.2f}",
-                f"${pred_tax:,.2f}", f"${pred_ins:,.2f}", f"${pred_hoa:,.2f}",
-                f"${total_cost:,.2f}", f"{features['pct_area_100yr_flood']:.1f}%",
-                "Suburban MUD" if features['water_mud_flag']==1 else "Standard Municipal"
-            ],
-            f"Alternative: {alt_zip} ({alt_city})": [
-                f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}",
-                f"${alt_pred_tax:,.2f}", f"${alt_pred_ins:,.2f}", f"${alt_pred_hoa:,.2f}",
-                f"${alt_total_cost:,.2f}", f"{alt_features['pct_area_100yr_flood']:.1f}%",
-                "Suburban MUD" if alt_features['water_mud_flag']==1 else "Standard Municipal"
-            ]
+            "Cost / Metric": comp_rows,
+            f"Target: {zip_query} ({city_name})": target_vals,
+            f"Alternative: {alt_zip} ({alt_city})": alt_vals
         })
         st.table(comp_df)
 
@@ -313,16 +300,8 @@ def main():
         st.subheader("Model Logic & Interpretability (SHAP)")
         st.markdown("Understand exactly how household parameters influence the ML-predicted components.")
         
-        with st.expander("How to read these charts"):
-            st.markdown("""
-            **What it tracks:** These charts map the algorithm's decision trees. 
-            - It starts from the **Baseline Value** (the average cost for all households).
-            - Each bar shows exactly how many dollars a specific feature added or subtracted to reach the final estimate.
-            """)
-            
         if hasattr(model, 'estimators_'):
-            # Accurately mapping SHAP extraction to the true 5 outputs of the training notebook
-            target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "HOA / Maintenance"]
+            target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "Subdivision Maintenance / HOA"]
             for i, estimator in enumerate(model.estimators_):
                 target_name = target_names[i]
                 with st.expander(f"Feature Impact: {target_name}", expanded=(i==0)):
@@ -342,8 +321,6 @@ def main():
 
     with tab5:
         st.subheader("Project Roadmap: Phase 03 Capstone Completion")
-        st.markdown("Detailed breakdown of pipeline initialization, model evaluation, and UI integration.")
-        
         with st.container():
             col1, col2 = st.columns([1, 3])
             with col1:
@@ -378,18 +355,77 @@ def main():
                 - **Achieved:** Initialized the SHAP library and ran a `TreeExplainer` across all 5 regressors to calculate feature influence and establish baseline expected monthly costs.
                 - **Contributors:** Brandon Matias & Jonah Joseph
                 """)
-            st.divider()
 
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.markdown("#### Week 10")
-                st.caption("Visual Diagnostics")
-            with col2:
-                st.markdown("""
-                - **Achieved:** Generated and integrated SHAP beeswarm plots into the dashboard to visually map out the explainability matrix and feature impacts.
-                - **Contributors:** Taki Eddine Boubekri & Khadijah Patience
-                """)
+    with tab6:
+        st.subheader("Regional Budget Recommender")
+        st.markdown(f"Find alternative ZIP codes within a specific radius of **{zip_query} ({city_name})** that fit your maximum occupancy budget.")
+        
+        with st.form("budget_recommender_form"):
+            r_col1, r_col2 = st.columns(2)
+            with r_col1:
+                max_budget = st.number_input("Maximum Monthly Budget ($)", min_value=500.0, max_value=10000.0, value=2500.0, step=100.0)
+            with r_col2:
+                search_radius = st.slider("Search Radius (Miles)", min_value=1, max_value=50, value=10)
+                
+            submit_search = st.form_submit_button("Search Affordable Areas")
+
+        if submit_search:
+            with st.spinner("Scanning regional ZIP codes..."):
+                # 1. Filter ZIPs by geographic radius
+                target_lat = data.get('latitude', 0.0)
+                target_lon = data.get('longitude', 0.0)
+                df_search = df.copy()
+                df_search['dist_to_target'] = df_search.apply(
+                    lambda r: calc_geo_distance_miles(target_lat, target_lon, r.get('latitude', 0.0), r.get('longitude', 0.0)), axis=1
+                )
+                nearby_df = df_search[(df_search['dist_to_target'] <= search_radius) & (df_search['zip_code'] != zip_query)].copy()
+
+                if nearby_df.empty:
+                    st.warning(f"No alternative ZIP codes found within {search_radius} miles of {zip_query}.")
+                else:
+                    # 2. Prepare Batch ML Inputs for all nearby ZIPs
+                    batch_input = pd.DataFrame({
+                        'sqft': sqft_input,
+                        'occupants': occupants_input,
+                        'pct_area_100yr_flood': nearby_df['pct_area_100yr_flood'].fillna(0.0),
+                        'twia_mandatory': nearby_df['twia_mandatory'].fillna(0),
+                        'water_mud_flag': nearby_df['water_mud_flag'].fillna(0),
+                        'houston_cpi_food_scalar': nearby_df['houston_cpi_food_scalar'].fillna(1.0),
+                        'effective_tax_rate_pct': nearby_df['effective_tax_rate_pct'].fillna(2.2),
+                        'five_year_pop_growth_pct': nearby_df['five_year_pop_growth_pct'].fillna(0.0)
+                    })
+
+                    # 3. Batch Predict via XGBoost
+                    batch_preds = model.predict(batch_input[expected_features])
+                    
+                    # 4. Calculate total costs for the batch
+                    food_costs = (batch_preds[:, 0] * grocery_multiplier) * time_multiplier
+                    utils_costs = (batch_preds[:, 1] + batch_preds[:, 2] + batch_preds[:, 3]) * time_multiplier
+                    hoa_costs = (batch_preds[:, 4] * time_multiplier) if include_hoa else 0.0
+                    tax_costs = (sqft_input * 190.0 * (batch_input['effective_tax_rate_pct'] / 100.0) / 12.0) * time_multiplier
+
+                    nearby_df['Estimated Total'] = food_costs + utils_costs + hoa_costs + tax_costs
+                    
+                    # 5. Filter by the user's budget threshold
+                    affordable_df = nearby_df[nearby_df['Estimated Total'] <= (max_budget * time_multiplier)]
+                    
+                    if affordable_df.empty:
+                        st.error(f"No ZIP codes within {search_radius} miles met the budget of ${max_budget:,.2f}.")
+                    else:
+                        st.success(f"Found {len(affordable_df)} affordable ZIP codes within {search_radius} miles!")
+                        display_cols = ['zip_code', 'city_name', 'cluster_archetype_name', 'dist_to_target', 'Estimated Total']
+                        res_df = affordable_df[display_cols].sort_values('Estimated Total').rename(columns={
+                            'zip_code': 'ZIP',
+                            'city_name': 'City',
+                            'cluster_archetype_name': 'Archetype',
+                            'dist_to_target': 'Distance (Miles)',
+                            'Estimated Total': 'Total Monthly Cost'
+                        })
+                        
+                        # Format final output
+                        res_df['Total Monthly Cost'] = res_df['Total Monthly Cost'].apply(lambda x: f"${x:,.2f}")
+                        res_df['Distance (Miles)'] = res_df['Distance (Miles)'].apply(lambda x: f"{x:.1f}")
+                        st.dataframe(res_df, use_container_width=True, hide_index=True)
 
 if __name__ == "__main__":
     main()

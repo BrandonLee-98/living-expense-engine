@@ -126,7 +126,7 @@ def main():
     # --- UI SIDEBAR ---
     st.sidebar.header("1. Property Parameters")
     zip_query = st.sidebar.text_input("Enter 5-Digit ZIP Code", value="77598", max_chars=5).strip()
-    sqft_input = st.sidebar.number_input("Property Square Footage", min_value=500, max_value=10000, value=1500, step=50)
+    sqft_input = st.sidebar.slider("Property Square Footage", min_value=800, max_value=4000, value=1500, step=50)
     occupants_input = st.sidebar.slider("Household Occupants", min_value=1, max_value=6, value=2)
 
     st.sidebar.markdown("---")
@@ -435,7 +435,21 @@ def main():
         **Household Evaluation Matrix (Scenario Breakdown)**
         * **What it tracks:** A testing dataset of 2,790 simulated household scenarios combining 279 unique ZIP codes with random variations of home sizes (800 to 4,000 sqft) and household sizes (1 to 6 occupants). 
         * **What it means:** This provides a statistical breakdown that confirms the simulated parameters worked exactly as intended. It demonstrates how the engine behaves across a wide spectrum of realistic living situations to ensure accurate testing.
+        """)
 
+        # Add the Feature Matrix Table here
+        matrix_data = {
+            "Feature": ["sqft", "occupants", "pct_area_100yr_flood", "twia_mandatory", 
+                        "water_mud_flag", "houston_cpi_food_scalar", "effective_tax_rate_pct", "five_year_pop_growth_pct"],
+            "mean": ["2399.350", "3.496", "4.265", "0.097", "0.294", "1.045", "2.378", "10.862"],
+            "std": ["927.335", "1.701", "9.309", "0.296", "0.456", "0.000", "0.394", "58.923"],
+            "min": ["801.000", "1.000", "1.000", "0.000", "0.000", "1.045", "2.130", "-33.330"],
+            "max": ["3999.000", "6.000", "42.000", "1.000", "1.000", "1.045", "3.170", "871.700"]
+        }
+        
+        st.table(pd.DataFrame(matrix_data))
+
+        st.markdown("""
         **Baseline Cost Analysis (Global Interpretability)**
         * **What it tracks:** The starting baseline values calculated by the engine for all five core expenses: Food Cost, Electricity, Water, Gas, and HOA / Maintenance.
         * **What it means:** This decodes the model's underlying logic by establishing the baseline expected monthly costs before specific household features adjust the final prediction.
@@ -506,39 +520,23 @@ def main():
             render_image("diagnostics_hoa.png", "HOA / Maintenance Target Validation & Homoscedasticity Check", BASE_DIR)
         st.divider()
 
-        st.subheader("6. Local Household Interpretability (Live SHAP)")
-        st.markdown("Understand exactly how your current **sidebar parameters dynamically influence** the ML-predicted components for the active ZIP code scenario.")
-        
-        if hasattr(model, 'estimators_'):
-            target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "Subdivision Maintenance / HOA"]
-            for i, estimator in enumerate(model.estimators_):
-                target_name = target_names[i]
-                with st.expander(f"Live Feature Impact: {target_name}", expanded=(i==0)):
-                    try:
-                        explainer = shap.TreeExplainer(estimator)
-                        shap_values = explainer.shap_values(input_df)
-                        fig, ax = plt.subplots(figsize=(8, 4))
-                        shap.summary_plot(shap_values, input_df, plot_type="bar", show=False, axis_color="#2B6CB0")
-                        plt.title(f"Local Household Breakdown for {target_name}")
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        plt.close(fig)
-                    except Exception as e:
-                        st.error(f"Failed to generate SHAP tree graph: {e}")
-        else:
-            st.warning("The loaded model lacks underlying tree estimators for live local SHAP extraction.")
-
     with tab5:
-        st.subheader("Project Roadmap: Phase 03 Capstone Completion")
+        st.subheader("Phase 03 Execution Roadmap: Multi-Output Model Training & UI Integration")
+        
         with st.container():
             col1, col2 = st.columns([1, 3])
             with col1:
                 st.markdown("#### Week 7")
-                st.caption("Pipeline & Environment")
+                st.caption("Baseline Computations & Data Engineering")
+                st.info("**Key Hurdle:** Implementing proper data versioning to safeguard pipeline outputs.")
             with col2:
                 st.markdown("""
-                - **Achieved:** Mounted Google Drive working directories, loaded the core `DataPipeline`, and successfully initialized the XGBoost multi-output regression model for all 5 utility estimators.
-                - **Contributors:** Brandon Matias & Taki Eddine Boubekri
+                *   **County Baselines Exported:** Loaded `master_living_costs_clustered.parquet` to calculate county-level naive baseline medians, exporting the schema as `county_baselines.json`. This provides a crucial fallback mechanism ensuring the web application remains stable even if an unmapped ZIP code is entered.
+                *   **Insurance Audit Completed:** Cross-referenced TWIA windstorm and NFIP flood rates against the TDI HelpInsure tool to ensure absolute accuracy of coastal insurance surcharges.
+                *   **Data Version Control:** Initiated DVC tracking for dataset iterations, allowing the team to safely revert pipeline outputs if schema changes compromised downstream model training. 
+                *   **Food Budget Verification:** Tested grocery cost formulas to confirm scaling accuracy across household sizes (1–8 occupants) against USDA guidelines.
+                
+                **Contributors:** Khadijah Patience & Taki Eddine Boubekri
                 """)
             st.divider()
 
@@ -546,11 +544,16 @@ def main():
             col1, col2 = st.columns([1, 3])
             with col1:
                 st.markdown("#### Week 8")
-                st.caption("Evaluation Matrix")
+                st.caption("Multi-Target Model Training & Tuning")
+                st.info("**Key Hurdle:** Capturing step-function price jumps (like MUD fees) which standard linear regression failed to map.")
             with col2:
                 st.markdown("""
-                - **Achieved:** Generated the testing dataset of 2,790 simulated household scenarios across 279 ZIP codes to establish a statistical breakdown of model behavior.
-                - **Contributors:** Jonah Joseph & Khadijah Patience
+                *   **Multi-Output Regressors:** Built and trained XGBoost models to simultaneously predict all four core monthly living expense categories (`yelectric, ywater, yinsurance, ygroceries`). 
+                *   **Non-Linear Modeling:** Successfully deployed XGBoost to accurately model sudden price spikes, specifically coastal insurance ($175/mo) and MUD base fees, mapping these step-functions precisely at specific geographical borders.
+                *   **Hyperparameter Sweeps:** Executed `GridSearchCV` optimization. Logged MAE, RMSE, and R² scores, benchmarking the ML model's performance lift against the naive county medians to quantify its predictive value.
+                *   **Spatial Arbitrage Engine Developed:** Engineered the `find_nearest_arbitrage_zip` algorithm using regional ZIP centroid coordinates, allowing the engine to automatically search for cost-saving alternative locations just outside high-expense zones.
+
+                **Contributors:** Jonah Joseph & Khadijah Patience
                 """)
             st.divider()
 
@@ -558,12 +561,35 @@ def main():
             col1, col2 = st.columns([1, 3])
             with col1:
                 st.markdown("#### Week 9")
-                st.caption("Global Interpretability")
+                st.caption("Full-Stack Dashboard Integration")
+                st.info("**Key Hurdle:** Replacing static CSV lookups with dynamic inference functions without causing UI latency.")
             with col2:
                 st.markdown("""
-                - **Achieved:** Initialized the SHAP library and ran a `TreeExplainer` across all 5 regressors to calculate feature influence and establish baseline expected monthly costs.
-                - **Contributors:** Brandon Matias & Jonah Joseph
+                *   **Model-Driven Summaries:** Successfully wired Streamlit KPI widgets directly to the `predict_monthly_expenses()` inference wrapper. All metric cards now generate dynamic predictions instantly based on user input. 
+                *   **Dynamic Visual Banners:** Programmed visual warning alerts for mandatory TWIA windstorm coverage and 100-year SFHA flood zones based on user ZIP selection.
+                *   **Tabbed Architecture:** Reorganized complex geographical and financial data into clean, dedicated tabs (Itemized Breakdown, Flood & MUD Risk, Utility Grid Detail, ML Explainability).
+                *   **Model Serialization:** Serialized the finished XGBoost pipeline into a `.joblib` artifact, allowing the frontend to load and execute predictions instantly.
+
+                **Contributors:** Brandon Matias, Jonah Joseph & Taki Eddine Boubekri
                 """)
+            st.divider()
+
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown("#### Week 10")
+                st.caption("Final QA, Sanitization & Polish")
+                st.info("**Key Hurdle:** Ensuring all UI inputs (like trailing spaces in ZIP codes) didn't crash the prediction engine.")
+            with col2:
+                st.markdown("""
+                *   **Input Sanitization:** Built robust user controls (USDA budget radio buttons, household slider, monthly/annual toggle) and applied string sanitization (`.strip()`) to ZIP inputs to prevent lookup errors.
+                *   **Fallback Logic Deployed:** Finalized the `DataPipeline.py` inference function, combining ML predictions with dynamic USDA grocery scaling logic while maintaining the `county_baselines.json` fallback safety net.
+                *   **Performance Benchmarking:** Verified that combined ML inference, grocery scaling lookups, and UI rendering consistently execute in under 150ms per request.
+                *   **Executive Report Integration:** Implemented the `generate_pdf_report()` engine, allowing users to export a polished PDF of their cost breakdowns and spatial risk analyses directly from the dashboard.
+
+                **Contributors:** Taki Eddine Boubekri & Brandon Matias
+                """)
+            st.divider()
 
 if __name__ == "__main__":
     main()

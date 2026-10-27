@@ -109,7 +109,7 @@ def main():
     # --- UI SIDEBAR ---
     st.sidebar.header("1. Property Parameters")
     zip_query = st.sidebar.text_input("Enter 5-Digit ZIP Code", value="77598", max_chars=5).strip()
-    sqft_input = st.sidebar.number_input("Property Square Footage", min_value=500, max_value=10000, value=1500)
+    sqft_input = st.sidebar.number_input("Property Square Footage", min_value=500, max_value=10000, value=1500, step=50) # Fix 3: Step size 50
     occupants_input = st.sidebar.slider("Household Occupants", min_value=1, max_value=6, value=2)
 
     st.sidebar.markdown("---")
@@ -143,7 +143,6 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.header("4. ZIP Classification Profile")
-    # Fix 1: Lower the text sizing in the Zip classification profile using standard Markdown/HTML formatting
     st.sidebar.markdown(f"""
     <div style="font-size: 14px; line-height: 1.5;">
     <b>City:</b> {city_name}<br>
@@ -201,6 +200,9 @@ def main():
     alt_city = best_alt_data.get('city_name', 'Nearby')
     dist_miles = calc_geo_distance_miles(data.get('latitude'), data.get('longitude'), best_alt_data.get('latitude'), best_alt_data.get('longitude'))
 
+    # Fix 2: Check if target is already optimal
+    is_optimal_target = (alt_zip == zip_query) or (arbitrage_type == "optimal")
+
     alt_features = features.copy()
     alt_features.update({
         'pct_area_100yr_flood': float(best_alt_data.get('pct_area_100yr_flood', 0.0)),
@@ -227,7 +229,6 @@ def main():
 
     st.subheader(f"Cost Breakdown for ZIP Code: {zip_query} | {city_name} ({archetype})")
     
-    # Fix 3: Ensure cost figures on the main dashboard are equally spaced and professional
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
@@ -243,58 +244,86 @@ def main():
     st.markdown("---")
 
     # --- DEEP DIVE TABS ---
-    # Fix 4: Move the "Budget Recommender" tab right after the Utility Detail tab
     tab1, tab2, tab3, tab6, tab4, tab5 = st.tabs([
         "💰 Itemized Breakdown & Comparison",
         "🌊 Flood & MUD Risk",
         "⚡ Utility Grid Detail",
         "🎯 Budget Recommender",
-        "⚙️ ML Explainability (SHAP)", # Fix 2: Changed emoticon to a proper gear symbol
+        "⚙️ ML Explainability (SHAP)",
         "🗺️ Phase 03 Project Roadmap"
     ])
 
     with tab1:
         st.subheader("Target vs. Alternative Component Comparison")
-        if arbitrage_type == "optimal":
-            st.success(f"🌟 **Optimal Non-Mortgage Governance:** ZIP {zip_query} operates on standard municipal utilities without MUD taxes or coastal surcharges.")
+        
+        # Fix 2: Handle optimal duplicate display cleanly
+        if is_optimal_target:
+            st.success(f"🌟 **Optimal Non-Mortgage Governance:** ZIP {zip_query} already operates on optimal municipal utilities without MUD taxes or coastal surcharges. No alternative migration required.")
+            
+            comp_rows = ["Groceries & Food", "Utilities (Power/Water/Gas)"]
+            target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
+            if features['twia_mandatory'] == 1:
+                comp_rows.append("Mandatory TWIA Coastal Surcharge")
+                target_vals.append(f"${pred_twia:,.2f}")
+            if include_hoa:
+                comp_rows.append("Optional Subdivision Dues / HOA")
+                target_vals.append(f"${pred_hoa:,.2f}")
+            comp_rows.extend(["Total Estimated Cost", "5-Year Pop Growth Rate", "100-Yr Flood Exposure", "MUD Governance"])
+            target_vals.extend([f"${total_cost:,.2f}", f"{pop_growth_pct:+.1f}%", f"{features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if features['water_mud_flag']==1 else "Standard Municipal"])
+
+            comp_df = pd.DataFrame({
+                "Cost / Metric": comp_rows,
+                f"Target & Optimal: {zip_query} ({city_name})": target_vals
+            })
+            st.table(comp_df)
         else:
             st.info(f"💡 **Arbitrage Found:** Evaluating nearby **ZIP {alt_zip} ({alt_city})** — ~{dist_miles:.1f} miles away. Total Cost: ${alt_total_cost:,.2f}")
 
-        comp_rows = [
-            "Groceries & Food", "Utilities (Power/Water/Gas)"
-        ]
-        target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
-        alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}"]
+            comp_rows = [
+                "Groceries & Food", "Utilities (Power/Water/Gas)"
+            ]
+            target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
+            alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}"]
 
-        if features['twia_mandatory'] == 1 or alt_features['twia_mandatory'] == 1:
-            comp_rows.append("Mandatory TWIA Coastal Surcharge")
-            target_vals.append(f"${pred_twia:,.2f}")
-            alt_vals.append(f"${alt_pred_twia:,.2f}")
+            if features['twia_mandatory'] == 1 or alt_features['twia_mandatory'] == 1:
+                comp_rows.append("Mandatory TWIA Coastal Surcharge")
+                target_vals.append(f"${pred_twia:,.2f}")
+                alt_vals.append(f"${alt_pred_twia:,.2f}")
 
-        if include_hoa:
-            comp_rows.append("Optional Subdivision Dues / HOA")
-            target_vals.append(f"${pred_hoa:,.2f}")
-            alt_vals.append(f"${alt_pred_hoa:,.2f}")
+            if include_hoa:
+                comp_rows.append("Optional Subdivision Dues / HOA")
+                target_vals.append(f"${pred_hoa:,.2f}")
+                alt_vals.append(f"${alt_pred_hoa:,.2f}")
 
-        comp_rows.extend(["Total Estimated Cost", "5-Year Pop Growth Rate", "100-Yr Flood Exposure", "MUD Governance"])
-        target_vals.extend([f"${total_cost:,.2f}", f"{pop_growth_pct:+.1f}%", f"{features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if features['water_mud_flag']==1 else "Standard Municipal"])
-        alt_vals.extend([f"${alt_total_cost:,.2f}", f"{float(best_alt_data.get('five_year_pop_growth_pct', 0.0)):+.1f}%", f"{alt_features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if alt_features['water_mud_flag']==1 else "Standard Municipal"])
+            comp_rows.extend(["Total Estimated Cost", "5-Year Pop Growth Rate", "100-Yr Flood Exposure", "MUD Governance"])
+            target_vals.extend([f"${total_cost:,.2f}", f"{pop_growth_pct:+.1f}%", f"{features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if features['water_mud_flag']==1 else "Standard Municipal"])
+            alt_vals.extend([f"${alt_total_cost:,.2f}", f"{float(best_alt_data.get('five_year_pop_growth_pct', 0.0)):+.1f}%", f"{alt_features['pct_area_100yr_flood']:.1f}%", "Suburban MUD" if alt_features['water_mud_flag']==1 else "Standard Municipal"])
 
-        comp_df = pd.DataFrame({
-            "Cost / Metric": comp_rows,
-            f"Target: {zip_query} ({city_name})": target_vals,
-            f"Alternative: {alt_zip} ({alt_city})": alt_vals
-        })
-        st.table(comp_df)
+            comp_df = pd.DataFrame({
+                "Cost / Metric": comp_rows,
+                f"Target: {zip_query} ({city_name})": target_vals,
+                f"Alternative: {alt_zip} ({alt_city})": alt_vals
+            })
+            st.table(comp_df)
 
     with tab2:
-        # Fix 5: Add a clean and informative description for the Flood & Mud Risk tab
+        # Fix 1: Explicitly display 100-yr flood zone percent and MUD/Municipal water rates
         st.subheader("Actuarial Flood Hazard & Municipal Water Governance")
         st.markdown("""
         This tab evaluates structural flood exposure and water service governance for the selected ZIP code. 
         It details historical National Flood Insurance Program (NFIP) claim payouts, 100-year floodplain area percentages, 
         and Municipal Utility District (MUD) unincorporated tax governance rules to assess long-term infrastructure reliability.
         """)
+        st.markdown("---")
+        
+        f_col1, f_col2, f_col3 = st.columns(3)
+        with f_col1:
+            st.metric("100-Yr Flood Zone Area", f"{float(data.get('pct_area_100yr_flood', 0.0)):.1f}%")
+        with f_col2:
+            st.metric("Water Base Monthly Fee", f"${float(data.get('water_base_monthly_fee', 0.0)):,.2f}")
+        with f_col3:
+            st.metric("Water Rate per 1k Gal", f"${float(data.get('water_rate_per_1k_gal', 0.0)):,.2f}")
+
         st.markdown("---")
         st.markdown(f"**Historical NFIP Flood Claims:** {data.get('nfip_total_claims', 'N/A')}")
         st.markdown(f"**Average Building Payout:** ${float(data.get('nfip_avg_building_claim', 0.0)):,.2f}")
@@ -326,7 +355,8 @@ def main():
         with st.form("budget_recommender_form"):
             r_col1, r_col2 = st.columns(2)
             with r_col1:
-                max_budget = st.number_input("Maximum Monthly Budget ($)", min_value=500.0, max_value=10000.0, value=2500.0, step=100.0)
+                # Fix 4: Change default budget start number to $1500 instead of $2500
+                max_budget = st.number_input("Maximum Monthly Budget ($)", min_value=500.0, max_value=10000.0, value=1500.0, step=100.0)
             with r_col2:
                 search_radius = st.slider("Search Radius (Miles)", min_value=1, max_value=50, value=10)
                 

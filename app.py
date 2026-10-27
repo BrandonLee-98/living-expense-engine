@@ -83,7 +83,14 @@ def find_nearest_arbitrage_zip(df, target_row):
     return target_row, "optimal"
 
 # ==========================================
-# 4. MAIN APPLICATION
+# 4. DETERMINISTIC TWIA SURCHARGE ENGINE
+# ==========================================
+def calculate_twia_surcharge(twia_flag, multiplier):
+    # Mandatory coastal windstorm insurance surcharge ($125/mo baseline when mandatory)
+    return 125.0 * multiplier if twia_flag == 1 else 0.0
+
+# ==========================================
+# 5. MAIN APPLICATION
 # ==========================================
 def main():
     st.title("🏙️ Non-Mortgage Living Expense Estimation Engine")
@@ -180,8 +187,9 @@ def main():
     pred_food = (ml_food * grocery_multiplier) * time_multiplier
     pred_utils = (ml_elec + ml_water + ml_gas) * time_multiplier
     pred_hoa = (ml_hoa * time_multiplier) if include_hoa else 0.0
+    pred_twia = calculate_twia_surcharge(features['twia_mandatory'], time_multiplier)
 
-    total_cost = pred_food + pred_utils + pred_hoa
+    total_cost = pred_food + pred_utils + pred_hoa + pred_twia
 
     # --- ARBITRAGE EXECUTION ---
     best_alt_data, arbitrage_type = find_nearest_arbitrage_zip(df, data)
@@ -203,12 +211,13 @@ def main():
     alt_pred_food = (alt_preds[0] * grocery_multiplier) * time_multiplier
     alt_pred_utils = (alt_preds[1] + alt_preds[2] + alt_preds[3]) * time_multiplier
     alt_pred_hoa = (alt_preds[4] * time_multiplier) if include_hoa else 0.0
+    alt_pred_twia = calculate_twia_surcharge(int(alt_features['twia_mandatory']), time_multiplier)
     
-    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_hoa
+    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_hoa + alt_pred_twia
 
     # --- RENDER DASHBOARD HEADER ---
     if features['twia_mandatory'] == 1:
-        st.warning(f"🌊 **Coastal Zone Designation ({city_name}):** Located within TWIA coastal policy eligibility boundary.")
+        st.warning(f"🌊 **Coastal Surcharge Notice ({city_name}):** Mandatory Texas Windstorm Insurance Association (TWIA) coverage required.")
     if features['pct_area_100yr_flood'] > 20.0:
         st.error(f"⚠️ **High Flood Hazard Alert ({city_name}):** {features['pct_area_100yr_flood']:.1f}% of this ZIP area lies within the 100-year floodplain.")
 
@@ -217,7 +226,7 @@ def main():
     col1.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
     col2.metric(f"Food ({selected_tier_name.split(' ')[0]})", f"${pred_food:,.2f}")
     col3.metric("Utilities (Power/Water/Gas)", f"${pred_utils:,.2f}")
-    col4.metric("HOA Fees" if include_hoa else "HOA (Disabled)", f"${pred_hoa:,.2f}")
+    col4.metric("TWIA Surcharge", f"${pred_twia:,.2f}" if features['twia_mandatory'] == 1 else "$0.00")
     col5.metric("5-Yr Pop Growth", f"{pop_growth_pct:+.1f}%")
 
     st.markdown("---")
@@ -244,6 +253,11 @@ def main():
         ]
         target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
         alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}"]
+
+        if features['twia_mandatory'] == 1 or alt_features['twia_mandatory'] == 1:
+            comp_rows.append("Mandatory TWIA Coastal Surcharge")
+            target_vals.append(f"${pred_twia:,.2f}")
+            alt_vals.append(f"${alt_pred_twia:,.2f}")
 
         if include_hoa:
             comp_rows.append("Optional Subdivision Dues / HOA")
@@ -388,8 +402,9 @@ def main():
                     food_costs = (batch_preds[:, 0] * grocery_multiplier) * time_multiplier
                     utils_costs = (batch_preds[:, 1] + batch_preds[:, 2] + batch_preds[:, 3]) * time_multiplier
                     hoa_costs = (batch_preds[:, 4] * time_multiplier) if include_hoa else 0.0
+                    twia_costs = batch_input['twia_mandatory'].apply(lambda x: calculate_twia_surcharge(int(x), time_multiplier))
 
-                    nearby_df['Estimated Total'] = food_costs + utils_costs + hoa_costs
+                    nearby_df['Estimated Total'] = food_costs + utils_costs + hoa_costs + twia_costs
                     
                     affordable_df = nearby_df[nearby_df['Estimated Total'] <= (max_budget * time_multiplier)]
                     

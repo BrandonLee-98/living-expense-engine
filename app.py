@@ -86,7 +86,6 @@ def find_nearest_arbitrage_zip(df, target_row):
 # 4. DETERMINISTIC TWIA SURCHARGE ENGINE
 # ==========================================
 def calculate_twia_surcharge(twia_flag, multiplier):
-    # Mandatory coastal windstorm insurance surcharge ($125/mo baseline when mandatory)
     return 125.0 * multiplier if twia_flag == 1 else 0.0
 
 # ==========================================
@@ -94,7 +93,7 @@ def calculate_twia_surcharge(twia_flag, multiplier):
 # ==========================================
 def main():
     st.title("🏙️ Non-Mortgage Living Expense Estimation Engine")
-    st.markdown("### Harris, Fort Bend, Galveston, and Brazoria Counties")
+    st.markdown("### Harris, Fort Bend, and Galveston Counties")
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     MODEL_FILENAME = os.path.join(BASE_DIR, "xgboost_cost_model.joblib")
@@ -144,10 +143,15 @@ def main():
 
     st.sidebar.markdown("---")
     st.sidebar.header("4. ZIP Classification Profile")
-    col1, col2 = st.sidebar.columns(2)
-    col1.metric(label="City", value=city_name)
-    col2.metric(label="Archetype", value=archetype)
-    st.sidebar.info(f"**5-Year Population Growth Rate:** {pop_growth_pct:+.1f}%\n\nThis ZIP code exhibits stable municipal infrastructure with high-density urban core characteristics.")
+    # Fix 1: Lower the text sizing in the Zip classification profile using standard Markdown/HTML formatting
+    st.sidebar.markdown(f"""
+    <div style="font-size: 14px; line-height: 1.5;">
+    <b>City:</b> {city_name}<br>
+    <b>Archetype:</b> {archetype}<br><br>
+    <b>5-Year Population Growth Rate:</b> {pop_growth_pct:+.1f}%<br>
+    <i>This ZIP code exhibits stable municipal infrastructure with high-density urban core characteristics.</i>
+    </div>
+    """, unsafe_allow_html=True)
 
     # --- ML DATA PREPARATION ---
     features = {
@@ -217,28 +221,36 @@ def main():
 
     # --- RENDER DASHBOARD HEADER ---
     if features['twia_mandatory'] == 1:
-        st.warning(f"🌊 **Coastal Surcharge Notice ({city_name}):** Mandatory Texas Windstorm Insurance Association (TWIA) coverage required.")
+        st.warning(f"🌊 **Coastal Zone Designation ({city_name}):** Located within TWIA coastal policy eligibility boundary.")
     if features['pct_area_100yr_flood'] > 20.0:
         st.error(f"⚠️ **High Flood Hazard Alert ({city_name}):** {features['pct_area_100yr_flood']:.1f}% of this ZIP area lies within the 100-year floodplain.")
 
     st.subheader(f"Cost Breakdown for ZIP Code: {zip_query} | {city_name} ({archetype})")
+    
+    # Fix 3: Ensure cost figures on the main dashboard are equally spaced and professional
     col1, col2, col3, col4, col5 = st.columns(5)
-    col1.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
-    col2.metric(f"Food ({selected_tier_name.split(' ')[0]})", f"${pred_food:,.2f}")
-    col3.metric("Utilities (Power/Water/Gas)", f"${pred_utils:,.2f}")
-    col4.metric("TWIA Surcharge", f"${pred_twia:,.2f}" if features['twia_mandatory'] == 1 else "$0.00")
-    col5.metric("5-Yr Pop Growth", f"{pop_growth_pct:+.1f}%")
+    with col1:
+        st.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
+    with col2:
+        st.metric(f"Food ({selected_tier_name.split(' ')[0]})", f"${pred_food:,.2f}")
+    with col3:
+        st.metric("Utilities", f"${pred_utils:,.2f}")
+    with col4:
+        st.metric("TWIA Surcharge", f"${pred_twia:,.2f}" if features['twia_mandatory'] == 1 else "$0.00")
+    with col5:
+        st.metric("5-Yr Pop Growth", f"{pop_growth_pct:+.1f}%")
 
     st.markdown("---")
 
     # --- DEEP DIVE TABS ---
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    # Fix 4: Move the "Budget Recommender" tab right after the Utility Detail tab
+    tab1, tab2, tab3, tab6, tab4, tab5 = st.tabs([
         "💰 Itemized Breakdown & Comparison",
         "🌊 Flood & MUD Risk",
         "⚡ Utility Grid Detail",
-        "🤖 ML Explainability (SHAP)",
-        "🗺️ Phase 03 Project Roadmap",
-        "🎯 Budget Recommender"
+        "🎯 Budget Recommender",
+        "⚙️ ML Explainability (SHAP)", # Fix 2: Changed emoticon to a proper gear symbol
+        "🗺️ Phase 03 Project Roadmap"
     ])
 
     with tab1:
@@ -276,7 +288,14 @@ def main():
         st.table(comp_df)
 
     with tab2:
+        # Fix 5: Add a clean and informative description for the Flood & Mud Risk tab
         st.subheader("Actuarial Flood Hazard & Municipal Water Governance")
+        st.markdown("""
+        This tab evaluates structural flood exposure and water service governance for the selected ZIP code. 
+        It details historical National Flood Insurance Program (NFIP) claim payouts, 100-year floodplain area percentages, 
+        and Municipal Utility District (MUD) unincorporated tax governance rules to assess long-term infrastructure reliability.
+        """)
+        st.markdown("---")
         st.markdown(f"**Historical NFIP Flood Claims:** {data.get('nfip_total_claims', 'N/A')}")
         st.markdown(f"**Average Building Payout:** ${float(data.get('nfip_avg_building_claim', 0.0)):,.2f}")
         st.markdown(f"**Average Contents Payout:** ${float(data.get('nfip_avg_contents_claim', 0.0)):,.2f}")
@@ -299,66 +318,6 @@ def main():
             st.markdown(f"- **Gas Utility Distribution Provider:** `{data.get('gas_provider', 'Unknown TDU')}`")
             st.markdown(f"- **Base Monthly Fee:** `${float(data.get('gas_base_monthly_fee', 0.0)):.2f}`")
             st.markdown(f"- **Distribution Charge per CCF:** `${float(data.get('gas_distribution_rate_per_ccf', 0.0)):.4f}`")
-
-    with tab4:
-        st.subheader("Model Logic & Interpretability (SHAP)")
-        st.markdown("Understand exactly how household parameters influence the ML-predicted components.")
-        
-        if hasattr(model, 'estimators_'):
-            target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "Subdivision Maintenance / HOA"]
-            for i, estimator in enumerate(model.estimators_):
-                target_name = target_names[i]
-                with st.expander(f"Feature Impact: {target_name}", expanded=(i==0)):
-                    try:
-                        explainer = shap.TreeExplainer(estimator)
-                        shap_values = explainer.shap_values(input_df)
-                        fig, ax = plt.subplots(figsize=(8, 4))
-                        shap.summary_plot(shap_values, input_df, plot_type="bar", show=False, axis_color="#2B6CB0")
-                        plt.title(f"Local Household Breakdown for {target_name}")
-                        plt.tight_layout()
-                        st.pyplot(fig)
-                        plt.close(fig)
-                    except Exception as e:
-                        st.error(f"Failed to generate SHAP tree graph: {e}")
-        else:
-            st.warning("The loaded model lacks underlying tree estimators for SHAP extraction.")
-
-    with tab5:
-        st.subheader("Project Roadmap: Phase 03 Capstone Completion")
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.markdown("#### Week 7")
-                st.caption("Pipeline & Environment")
-            with col2:
-                st.markdown("""
-                - **Achieved:** Mounted Google Drive working directories, loaded the core `DataPipeline`, and successfully initialized the XGBoost multi-output regression model for all 5 utility estimators.
-                - **Contributors:** Brandon Matias & Taki Eddine Boubekri
-                """)
-            st.divider()
-
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.markdown("#### Week 8")
-                st.caption("Evaluation Matrix")
-            with col2:
-                st.markdown("""
-                - **Achieved:** Generated the testing dataset of 2,790 simulated household scenarios across 279 ZIP codes to establish a statistical breakdown of model behavior.
-                - **Contributors:** Jonah Joseph & Khadijah Patience
-                """)
-            st.divider()
-
-        with st.container():
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.markdown("#### Week 9")
-                st.caption("Global Interpretability")
-            with col2:
-                st.markdown("""
-                - **Achieved:** Initialized the SHAP library and ran a `TreeExplainer` across all 5 regressors to calculate feature influence and establish baseline expected monthly costs.
-                - **Contributors:** Brandon Matias & Jonah Joseph
-                """)
 
     with tab6:
         st.subheader("Regional Budget Recommender")
@@ -424,6 +383,66 @@ def main():
                         res_df['Total Monthly Cost'] = res_df['Total Monthly Cost'].apply(lambda x: f"${x:,.2f}")
                         res_df['Distance (Miles)'] = res_df['Distance (Miles)'].apply(lambda x: f"{x:.1f}")
                         st.dataframe(res_df, use_container_width=True, hide_index=True)
+
+    with tab4:
+        st.subheader("Model Logic & Interpretability (SHAP)")
+        st.markdown("Understand exactly how household parameters influence the ML-predicted components.")
+        
+        if hasattr(model, 'estimators_'):
+            target_names = ["Groceries & Food", "Electricity", "Water", "Natural Gas", "Subdivision Maintenance / HOA"]
+            for i, estimator in enumerate(model.estimators_):
+                target_name = target_names[i]
+                with st.expander(f"Feature Impact: {target_name}", expanded=(i==0)):
+                    try:
+                        explainer = shap.TreeExplainer(estimator)
+                        shap_values = explainer.shap_values(input_df)
+                        fig, ax = plt.subplots(figsize=(8, 4))
+                        shap.summary_plot(shap_values, input_df, plot_type="bar", show=False, axis_color="#2B6CB0")
+                        plt.title(f"Local Household Breakdown for {target_name}")
+                        plt.tight_layout()
+                        st.pyplot(fig)
+                        plt.close(fig)
+                    except Exception as e:
+                        st.error(f"Failed to generate SHAP tree graph: {e}")
+        else:
+            st.warning("The loaded model lacks underlying tree estimators for SHAP extraction.")
+
+    with tab5:
+        st.subheader("Project Roadmap: Phase 03 Capstone Completion")
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown("#### Week 7")
+                st.caption("Pipeline & Environment")
+            with col2:
+                st.markdown("""
+                - **Achieved:** Mounted Google Drive working directories, loaded the core `DataPipeline`, and successfully initialized the XGBoost multi-output regression model for all 5 utility estimators.
+                - **Contributors:** Brandon Matias & Taki Eddine Boubekri
+                """)
+            st.divider()
+
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown("#### Week 8")
+                st.caption("Evaluation Matrix")
+            with col2:
+                st.markdown("""
+                - **Achieved:** Generated the testing dataset of 2,790 simulated household scenarios across 279 ZIP codes to establish a statistical breakdown of model behavior.
+                - **Contributors:** Jonah Joseph & Khadijah Patience
+                """)
+            st.divider()
+
+        with st.container():
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.markdown("#### Week 9")
+                st.caption("Global Interpretability")
+            with col2:
+                st.markdown("""
+                - **Achieved:** Initialized the SHAP library and ran a `TreeExplainer` across all 5 regressors to calculate feature influence and establish baseline expected monthly costs.
+                - **Contributors:** Brandon Matias & Jonah Joseph
+                """)
 
 if __name__ == "__main__":
     main()

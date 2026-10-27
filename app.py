@@ -260,13 +260,14 @@ def main():
     st.markdown("---")
 
     # --- DEEP DIVE TABS ---
-    tab1, tab2, tab3, tab6, tab4, tab5 = st.tabs([
+    tab1, tab2, tab3, tab6, tab4, tab5, tab7 = st.tabs([
         "💰 Itemized Breakdown & Comparison",
         "🌊 Flood & MUD Risk",
         "⚡ Utility Grid Detail",
         "🎯 Budget Recommender",
         "📊 ML Explainability & Diagnostics",
-        "🗺️ Phase 03 Project Roadmap"
+        "🗺️ Phase 03 Project Roadmap",
+        "🤖 AI Architecture & Framework"
     ])
 
     with tab1:
@@ -595,6 +596,76 @@ def main():
                 **Contributors:** Taki Eddine Boubekri & Brandon Matias
                 """)
             st.divider()
+
+    with tab7:
+        st.header("🤖 AI Architecture & Framework")
+        st.markdown("""
+        The **Living Expense Estimation Engine** combines non-linear Machine Learning, Explainable AI (XAI), and Spatial Proximity Analytics 
+        to deliver precise, audit-defensible non-mortgage living cost predictions across Harris, Fort Bend, and Galveston Counties.
+        """)
+        st.divider()
+
+        # Section 1: Multi-Target ML Predictive Engine
+        st.markdown("### 1. Multi-Target Machine Learning (Predictive Engine)")
+        col_ai1, col_ai2 = st.columns([1, 2])
+        with col_ai1:
+            st.info("""
+            **Technology Used:**  
+            XGBoost (`MultiOutputRegressor`)  
+            
+            **Where It Operates:**  
+            Backend Model Pipeline (`xgboost_cost_model.joblib`)
+            """)
+        with col_ai2:
+            st.markdown("""
+            * **How It Works:** Rather than relying on simple linear averages or static lookup tables, our core engine runs an ensemble of gradient-boosted decision trees. When a user adjusts sidebar parameters (ZIP code, square footage, household occupants), the model simultaneously predicts all **five core non-mortgage expense targets** (Food, Electricity, Water, Natural Gas, and HOA) in real time.
+            * **Why XGBoost:** Regional living costs exhibit sudden "step-function" price jumps across administrative borders (such as Municipal Utility District water tax levies or coastal windstorm zones). Gradient-boosted trees excel at capturing these complex non-linear spatial boundaries with high accuracy.
+            """)
+        st.divider()
+
+        # Section 2: Explainable AI (XAI)
+        st.markdown("### 2. Explainable AI & Model Interpretability (XAI)")
+        col_xai1, col_xai2 = st.columns([1, 2])
+        with col_xai1:
+            st.success("""
+            **Technology Used:**  
+            SHAP (SHapley Additive exPlanations)  
+            
+            **Where It Operates:**  
+            Tab 5 (`ML Explainability & Diagnostics`)
+            """)
+        with col_xai2:
+            st.markdown("""
+            * **How It Works:** Machine learning models can act as opaque "black boxes." We integrate SHAP, grounded in cooperative game theory, to calculate the exact contribution of each input variable.
+            * **Why It Matters:** SHAP quantifies precisely how much each feature (e.g., adding an occupant vs. increasing home square footage) pushes each predicted cost above or below the baseline regional intercept, providing full transparency and auditability.
+            """)
+        st.divider()
+
+        # Section 3: Spatial Distance Analytics (Arbitrage Engine)
+        st.markdown("### 3. Spatial Distance Analytics & Arbitrage Engine")
+        col_geo1, col_geo2 = st.columns([1, 2])
+        with col_geo1:
+            st.warning("""
+            **Technology Used:**  
+            Spatial Proximity Engine (Haversine Distance Math)  
+            
+            **Where It Operates:**  
+            Tab 1 (`Comparison`) & Tab 4 (`Budget Recommender`)
+            """)
+        with col_geo2:
+            st.markdown("""
+            * **How It Works:** The engine calculates Great-Circle geographic distances between ZIP code centroids across the tri-county region.
+            * **What It Accomplishes:** When a target ZIP code contains heavy financial surcharges (like coastal insurance or MUD property tax levies), the spatial engine scans neighboring locations within a set radius, re-evaluating the XGBoost model to find lower-cost alternative ZIP codes just miles away.
+            """)
+        st.divider()
+
+        # Section 4: Deterministic Hybrid Rules
+        st.markdown("### 4. Hybrid Deterministic & AI Regulatory Rules")
+        st.markdown("""
+        To maintain absolute financial defensibility, predictive Machine Learning is paired with deterministic regulatory rules:
+        * **Coastal Windstorm Surcharges (TWIA):** Calculated deterministically ($125/mo policy surcharge) directly from Texas Department of Insurance (TDI) eligibility boundaries.
+        * **USDA Grocery Tiers:** Scaled using official USDA economy-of-scale formulas based on the selected household budget profile (Thrifty, Low-Cost, Moderate, Liberal).
+        """)
 
 if __name__ == "__main__":
     main()

@@ -450,9 +450,6 @@ def main():
         st.table(pd.DataFrame(matrix_data))
 
         st.markdown("""
-        **Baseline Cost Analysis (Global Interpretability)**
-        * **What it tracks:** The starting baseline values calculated by the engine for all five core expenses: Food Cost, Electricity, Water, Gas, and HOA / Maintenance.
-        * **What it means:** This decodes the model's underlying logic by establishing the baseline expected monthly costs before specific household features adjust the final prediction.
         
         *Baseline Intercepts established by the model:*
         * **Food Cost:** 1,314.46 USD
@@ -534,7 +531,7 @@ def main():
                 *   **County Baselines Exported:** Loaded `master_living_costs_clustered.parquet` to calculate county-level naive baseline medians, exporting the schema as `county_baselines.json`. This provides a crucial fallback mechanism ensuring the web application remains stable even if an unmapped ZIP code is entered.
                 *   **Insurance Audit Completed:** Cross-referenced TWIA windstorm and NFIP flood rates against the TDI HelpInsure tool to ensure absolute accuracy of coastal insurance surcharges.
                 *   **Data Version Control:** Initiated DVC tracking for dataset iterations, allowing the team to safely revert pipeline outputs if schema changes compromised downstream model training. 
-                *   **Food Budget Verification:** Tested grocery cost formulas to confirm scaling accuracy across household sizes (1–8 occupants) against USDA guidelines.
+                *   **Food Budget Verification:** Tested grocery cost formulas to confirm scaling accuracy across household sizes (1–6 occupants) against USDA guidelines.
                 
                 **Contributors:** Khadijah Patience & Taki Eddine Boubekri
                 """)

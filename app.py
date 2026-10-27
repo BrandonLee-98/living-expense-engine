@@ -83,15 +83,7 @@ def find_nearest_arbitrage_zip(df, target_row):
     return target_row, "optimal"
 
 # ==========================================
-# 4. DETERMINISTIC PROPERTY TAX ENGINE
-# ==========================================
-def calculate_property_tax(sqft, tax_rate, multiplier):
-    est_home_val = sqft * 190.0
-    monthly_tax = (est_home_val * (tax_rate / 100.0)) / 12.0
-    return monthly_tax * multiplier
-
-# ==========================================
-# 5. MAIN APPLICATION
+# 4. MAIN APPLICATION
 # ==========================================
 def main():
     st.title("🏙️ Non-Mortgage Living Expense Estimation Engine")
@@ -188,9 +180,8 @@ def main():
     pred_food = (ml_food * grocery_multiplier) * time_multiplier
     pred_utils = (ml_elec + ml_water + ml_gas) * time_multiplier
     pred_hoa = (ml_hoa * time_multiplier) if include_hoa else 0.0
-    pred_tax = calculate_property_tax(features['sqft'], features['effective_tax_rate_pct'], time_multiplier)
 
-    total_cost = pred_food + pred_utils + pred_tax + pred_hoa
+    total_cost = pred_food + pred_utils + pred_hoa
 
     # --- ARBITRAGE EXECUTION ---
     best_alt_data, arbitrage_type = find_nearest_arbitrage_zip(df, data)
@@ -212,9 +203,8 @@ def main():
     alt_pred_food = (alt_preds[0] * grocery_multiplier) * time_multiplier
     alt_pred_utils = (alt_preds[1] + alt_preds[2] + alt_preds[3]) * time_multiplier
     alt_pred_hoa = (alt_preds[4] * time_multiplier) if include_hoa else 0.0
-    alt_pred_tax = calculate_property_tax(alt_features['sqft'], alt_features['effective_tax_rate_pct'], time_multiplier)
     
-    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_tax + alt_pred_hoa
+    alt_total_cost = alt_pred_food + alt_pred_utils + alt_pred_hoa
 
     # --- RENDER DASHBOARD HEADER ---
     if features['twia_mandatory'] == 1:
@@ -227,7 +217,7 @@ def main():
     col1.metric("Total Occupancy Cost", f"${total_cost:,.2f}")
     col2.metric(f"Food ({selected_tier_name.split(' ')[0]})", f"${pred_food:,.2f}")
     col3.metric("Utilities (Power/Water/Gas)", f"${pred_utils:,.2f}")
-    col4.metric("Property Tax" + (" + HOA" if include_hoa else ""), f"${(pred_tax + pred_hoa):,.2f}")
+    col4.metric("HOA Fees" if include_hoa else "HOA (Disabled)", f"${pred_hoa:,.2f}")
     col5.metric("5-Yr Pop Growth", f"{pop_growth_pct:+.1f}%")
 
     st.markdown("---")
@@ -250,10 +240,10 @@ def main():
             st.info(f"💡 **Arbitrage Found:** Evaluating nearby **ZIP {alt_zip} ({alt_city})** — ~{dist_miles:.1f} miles away. Total Cost: ${alt_total_cost:,.2f}")
 
         comp_rows = [
-            "Groceries & Food", "Utilities (Power/Water/Gas)", "Property Tax"
+            "Groceries & Food", "Utilities (Power/Water/Gas)"
         ]
-        target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}", f"${pred_tax:,.2f}"]
-        alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}", f"${alt_pred_tax:,.2f}"]
+        target_vals = [f"${pred_food:,.2f}", f"${pred_utils:,.2f}"]
+        alt_vals = [f"${alt_pred_food:,.2f}", f"${alt_pred_utils:,.2f}"]
 
         if include_hoa:
             comp_rows.append("Optional Subdivision Dues / HOA")
@@ -371,7 +361,6 @@ def main():
 
         if submit_search:
             with st.spinner("Scanning regional ZIP codes..."):
-                # 1. Filter ZIPs by geographic radius
                 target_lat = data.get('latitude', 0.0)
                 target_lon = data.get('longitude', 0.0)
                 df_search = df.copy()
@@ -383,7 +372,6 @@ def main():
                 if nearby_df.empty:
                     st.warning(f"No alternative ZIP codes found within {search_radius} miles of {zip_query}.")
                 else:
-                    # 2. Prepare Batch ML Inputs for all nearby ZIPs
                     batch_input = pd.DataFrame({
                         'sqft': sqft_input,
                         'occupants': occupants_input,
@@ -395,18 +383,14 @@ def main():
                         'five_year_pop_growth_pct': nearby_df['five_year_pop_growth_pct'].fillna(0.0)
                     })
 
-                    # 3. Batch Predict via XGBoost
                     batch_preds = model.predict(batch_input[expected_features])
                     
-                    # 4. Calculate total costs for the batch
                     food_costs = (batch_preds[:, 0] * grocery_multiplier) * time_multiplier
                     utils_costs = (batch_preds[:, 1] + batch_preds[:, 2] + batch_preds[:, 3]) * time_multiplier
                     hoa_costs = (batch_preds[:, 4] * time_multiplier) if include_hoa else 0.0
-                    tax_costs = (sqft_input * 190.0 * (batch_input['effective_tax_rate_pct'] / 100.0) / 12.0) * time_multiplier
 
-                    nearby_df['Estimated Total'] = food_costs + utils_costs + hoa_costs + tax_costs
+                    nearby_df['Estimated Total'] = food_costs + utils_costs + hoa_costs
                     
-                    # 5. Filter by the user's budget threshold
                     affordable_df = nearby_df[nearby_df['Estimated Total'] <= (max_budget * time_multiplier)]
                     
                     if affordable_df.empty:
@@ -422,7 +406,6 @@ def main():
                             'Estimated Total': 'Total Monthly Cost'
                         })
                         
-                        # Format final output
                         res_df['Total Monthly Cost'] = res_df['Total Monthly Cost'].apply(lambda x: f"${x:,.2f}")
                         res_df['Distance (Miles)'] = res_df['Distance (Miles)'].apply(lambda x: f"{x:.1f}")
                         st.dataframe(res_df, use_container_width=True, hide_index=True)

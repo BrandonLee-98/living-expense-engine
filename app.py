@@ -334,6 +334,14 @@ def main():
             st.metric("Water Rate per 1k Gal", f"${float(data.get('water_rate_per_1k_gal', 0.0)):,.2f}")
 
         st.markdown("---")
+        st.subheader("Historical FEMA Flood Claims & Payouts")
+        st.markdown("""
+        The following metrics reflect historical data from the National Flood Insurance Program (NFIP). This data helps quantify the actual severity and frequency of past flood events in this ZIP code:
+        * **Historical NFIP Flood Claims:** The total volume of approved flood damage claims. A higher count indicates recurring neighborhood flooding.
+        * **Average Building Payout:** The average compensation paid for structural repairs (e.g., walls, foundations, electrical). Higher dollar amounts point to deeper, more destructive floodwaters.
+        * **Average Contents Payout:** The average compensation paid for lost personal property (e.g., furniture, appliances, clothing) inside the home.
+        """)
+        
         st.markdown(f"**Historical NFIP Flood Claims:** {data.get('nfip_total_claims', 'N/A')}")
         st.markdown(f"**Average Building Payout:** ${float(data.get('nfip_avg_building_claim', 0.0)):,.2f}")
         st.markdown(f"**Average Contents Payout:** ${float(data.get('nfip_avg_contents_claim', 0.0)):,.2f}")

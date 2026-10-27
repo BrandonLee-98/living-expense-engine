@@ -357,4 +357,5 @@ def main():
                 - **Contributors:** Taki Eddine Boubekri & Khadijah Patience
                 """)
 
-if __
+if __name__ == "__main__":
+    main()

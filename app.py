@@ -423,52 +423,39 @@ def main():
                         st.dataframe(res_df, use_container_width=True, hide_index=True)
 
     with tab4:
-        st.header("📊 ML Explainability & Interpretability Hub")
+        st.header("📊 ML Explainability & Diagnostics")
         st.markdown("""
         Welcome to the **"Under the Hood"** section of the engine. Here, we decode the XGBoost model's decision-making 
-        process using SHapley Additive exPlanations (SHAP) and evaluate its statistical accuracy against our 2,790 simulated test scenarios.
+        process using SHapley Additive exPlanations (SHAP) and evaluate its statistical accuracy against our simulated testing dataset.
         """)
         st.divider()
 
-        st.subheader("1. Model Baseline Intercepts")
+        st.subheader("1. Household Evaluation Matrix & Baseline Analysis")
         st.markdown("""
-        Before specific household scaling parameters (like square footage or occupant count) or geographical risk factors 
-        (like flood zones) adjust the output, the model establishes a foundational expected baseline cost across the region:
+        **Household Evaluation Matrix (Scenario Breakdown)**
+        * **What it tracks:** A testing dataset of 2,790 simulated household scenarios combining 279 unique ZIP codes with random variations of home sizes (800 to 4,000 sqft) and household sizes (1 to 6 occupants). 
+        * **What it means:** This provides a statistical breakdown that confirms the simulated parameters worked exactly as intended. It demonstrates how the engine behaves across a wide spectrum of realistic living situations to ensure accurate testing.
+
+        **Baseline Cost Analysis (Global Interpretability)**
+        * **What it tracks:** The starting baseline values calculated by the engine for all five core expenses: Food Cost, Electricity, Water, Gas, and HOA / Maintenance.
+        * **What it means:** This decodes the model's underlying logic by establishing the baseline expected monthly costs before specific household features adjust the final prediction.
         
-        * **Food Cost Intercept:** $1,314.46
-        * **HOA / Maintenance Intercept:** $207.06
-        * **Electricity Intercept:** $85.66
-        * **Water Intercept:** $75.25
-        * **Natural Gas Intercept:** $24.25
+        *Baseline Intercepts established by the model:*
+        * **Food Cost:** 1,314.46 USD
+        * **HOA / Maintenance:** 207.06 USD
+        * **Electricity:** 85.66 USD
+        * **Water:** 75.25 USD
+        * **Natural Gas:** 24.25 USD
         """)
         st.divider()
 
-        st.subheader("2. Global Feature Importance Matrix")
+        st.subheader("2. Feature Impact Chart (Beeswarm Plot)")
         st.markdown("""
-        This chart aggregates the absolute SHAP values across all testing scenarios, revealing which variables carry the most weight. 
-        Notice how **Square Footage** and **Occupants** act as the primary scalars for utility and food models, while localized 
-        factors like the **100-Yr Flood Zone** percentage heavily drive the HOA/maintenance estimations.
+        * **What it tracks:** An explainability matrix that calculates exactly how much each individual feature influences the predicted expenses.
+        * **What it means:** These charts provide a clear visual guide to how the model makes decisions. It shows exactly how much a specific feature (like a high number of occupants) adds or subtracts from the baseline monthly costs to generate your final custom estimate.
         """)
         render_image("shap_importance_all_targets.png", "Global Feature Importance Across All 5 Cost Targets", BASE_DIR)
-        st.divider()
-
-        st.subheader("3. Regression Performance Report Card")
-        st.markdown("""
-        Our evaluation matrix tests the model's predictions against the exact deterministic equations powering our data pipelines.
-        * **R² (Accuracy):** Scores near 1.000 indicate near-perfect capture of variance (e.g., Food is fundamentally tied to USDA multipliers).
-        * **MAE (Mean Absolute Error):** Shows our average dollar-amount deviation. Our electricity model, for instance, predicts within ~$1.66 of true real-world rates.
-        * **RMSE (Root Mean Square Error):** By heavily penalizing larger outliers, low RMSE scores confirm tight clustering without severe predictive misses.
-        """)
-        render_image("metric_summary.png", "Regression Metrics by Cost Target (R², MAE, RMSE)", BASE_DIR)
-        st.divider()
-
-        st.subheader("4. SHAP Beeswarm Feature Impact Rankings")
-        st.markdown("""
-        Beeswarm plots decode the *directional* impact of each feature. 
-        * **Each dot** represents one of the 2,790 simulated testing scenarios.
-        * **Color** represents the raw feature value (e.g., Red = High Square Footage, Blue = Low Square Footage).
-        * **Position on the X-axis** shows how much that specific feature pushed the predicted cost up or down from the baseline intercept.
-        """)
+        
         col_b1, col_b2 = st.columns(2)
         with col_b1:
             render_image("shap_beeswarm_food.png", "Food Cost SHAP Beeswarm", BASE_DIR)
@@ -479,16 +466,34 @@ def main():
             render_image("shap_beeswarm_hoa.png", "HOA / Maintenance SHAP Beeswarm", BASE_DIR)
         st.divider()
 
-        st.subheader("5. Error Diagnostics & Residual Analysis")
+        st.subheader("3. Regression Metrics by Cost Target")
         st.markdown("""
-        A highly reliable machine learning pipeline should produce errors that are randomly distributed and centered tightly around zero 
-        (a property known as *Homoscedasticity*). The histograms below prove that our model does not systematically over-predict or 
-        under-predict costs, meaning its accuracy remains structurally sound across all price tiers.
+        * **What it plots:** These three side-by-side bar charts act as our model's report card. They map out three key performance scores across all five of our cost categories (Food, Electricity, Water, Gas, and HOA): R² (overall accuracy), MAE (our average dollar mistake), and RMSE (our average mistake, but penalized more for larger errors).
+        * **What it means:** This shows the class at a glance what our model is good at. It visually proves that we are predicting Food, Water, Gas, and Electricity with incredible precision (tall R² bars near 1.0, and very short MAE/RMSE dollar bars). It also highlights that our HOA estimates are our weakest link, showing the highest average dollar error.
+        """)
+        render_image("metric_summary.png", "Regression Metrics by Cost Target (R², MAE, RMSE)", BASE_DIR)
+        st.divider()
+
+        st.subheader("4. Error Distribution Charts: Residual Distributions")
+        st.markdown("""
+        * **What it plots:** These five charts (histograms) look like bell curves and show the distribution of our errors. The horizontal axis represents the dollar amount we were off by, and the vertical axis (how tall the bars are) shows how many times we made that specific mistake.
+        * **What it means:** This shows the spread of our mistakes. A tall, skinny spike right at the zero mark means we are consistently accurate with very few outliers (which is exactly what we see for Food and Water). The HOA chart has a wider, flatter spread, showing the class that when we miss on an HOA prediction, we tend to miss by a wider dollar range.
         """)
         render_image("residual_histograms.png", "Residual Distributions Across All 5 Cost Targets", BASE_DIR)
+        st.divider()
 
-        st.markdown("#### Individual Target Validation (Actual vs. Predicted)")
-        diag_tabs = st.tabs(["Food", "Electricity", "Water", "Gas", "HOA"])
+        st.subheader("5. Error & Residual Diagnostics")
+        st.markdown("""
+        **Actual vs. Predicted (The Blue Scatter Plots)**
+        * **What it plots:** For each cost category, we plotted the actual historical cost on the horizontal axis and our model's predicted cost on the vertical axis. We also drew a red dashed diagonal line straight through the middle, which represents a "perfect fit" where the prediction exactly matches the actual cost.
+        * **What it means:** We want our blue dots to hug that red line as tightly as possible. When presenting this, point out how the dots for Food and Water are essentially perfectly lined up. For Electricity and Gas, you can point out a slight "staircase" effect, this is just a quirk of how our tree-based model groups square footage. For HOA, the dots are grouped in distinct streaks because actual HOA costs in our data are locked into three specific price tiers: 45 USD, 85 USD, and 275 USD.
+        
+        **Homoscedasticity Check (The Red Scatter Plots)**
+        * **What it plots:** This plots our predicted cost on the horizontal axis against our "residuals" (the exact dollar amount we were off by) on the vertical axis. A black dashed line runs across zero, representing a prediction with zero error.
+        * **What it means:** This chart checks if our model gets confused by more expensive homes. Ideally, we want the red dots scattered evenly both above and below the zero line, no matter how high the predicted cost gets. For Gas and Electricity, the errors are steady and flat across the board. However, for HOA, the class will notice the errors spread out and get larger as the predictions increase, showing exactly where our model struggles with those higher-tier ZIP codes.
+        """)
+        
+        diag_tabs = st.tabs(["Groceries & Food", "Electricity", "Water", "Natural Gas", "HOA / Maintenance"])
         with diag_tabs[0]:
             render_image("diagnostics_food.png", "Food Cost Target Validation & Homoscedasticity Check", BASE_DIR)
         with diag_tabs[1]:
@@ -499,8 +504,8 @@ def main():
             render_image("diagnostics_gas.png", "Gas Target Validation & Homoscedasticity Check", BASE_DIR)
         with diag_tabs[4]:
             render_image("diagnostics_hoa.png", "HOA / Maintenance Target Validation & Homoscedasticity Check", BASE_DIR)
-
         st.divider()
+
         st.subheader("6. Local Household Interpretability (Live SHAP)")
         st.markdown("Understand exactly how your current **sidebar parameters dynamically influence** the ML-predicted components for the active ZIP code scenario.")
         

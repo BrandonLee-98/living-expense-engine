@@ -6,6 +6,7 @@ import streamlit as st
 import shap
 import matplotlib.pyplot as plt
 import math
+import sqlite3
 
 # ==========================================
 # 1. INITIALIZATION & CONFIGURATION
@@ -24,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. CACHED RESOURCE LOADING
+# 2. CACHED RESOURCE LOADING & DATABASE
 # ==========================================
 @st.cache_resource(show_spinner=False)
 def load_model(model_path: str):
@@ -33,11 +34,30 @@ def load_model(model_path: str):
     return joblib.load(model_path)
 
 @st.cache_data(show_spinner=False)
-def load_data(csv_path: str):
-    if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"CSV not found at '{csv_path}'.")
-    df = pd.read_csv(csv_path)
+def load_all_db_data(db_path: str):
+    """Loads all data from SQLite into Pandas for the Spatial Arbitrage Engine."""
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found at '{db_path}'.")
+    conn = sqlite3.connect(db_path)
+    df = pd.read_sql("SELECT * FROM zip_data", conn)
+    conn.close()
+    
     if 'zip_code' in df.columns:
+        df['zip_code'] = df['zip_code'].astype(str).str.zfill(5)
+    return df
+
+def query_single_zip(db_path: str, zip_query: str):
+    """Executes a secure, parameterized SQL query to fetch a specific ZIP code."""
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database not found at '{db_path}'.")
+        
+    conn = sqlite3.connect(db_path)
+    query = "SELECT * FROM zip_data WHERE zip_code = ?"
+    # Using parameters (?,) prevents SQL injection attacks
+    df = pd.read_sql(query, conn, params=(zip_query,))
+    conn.close()
+    
+    if not df.empty and 'zip_code' in df.columns:
         df['zip_code'] = df['zip_code'].astype(str).str.zfill(5)
     return df
 
@@ -114,11 +134,12 @@ def main():
 
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     MODEL_FILENAME = os.path.join(BASE_DIR, "xgboost_cost_model.joblib")
-    CSV_FILENAME = os.path.join(BASE_DIR, "master_living_costs_clustered.csv")
+    DB_FILENAME = os.path.join(BASE_DIR, "living_costs.db")
 
     try:
         model = load_model(MODEL_FILENAME)
-        df = load_data(CSV_FILENAME)
+        # Load the full table for the Arbitrage Engine & Budget Recommender scans
+        df = load_all_db_data(DB_FILENAME) 
     except Exception as e:
         st.error(f"Critical Initialization Error: {e}")
         st.stop()
@@ -146,8 +167,9 @@ def main():
     view_mode = st.sidebar.radio("Display Horizon", ["Monthly ($/mo)", "Annualized ($/yr)"], horizontal=True)
     time_multiplier = 12 if view_mode == "Annualized ($/yr)" else 1
 
-    # --- LOOKUP PIPELINE ---
-    selected_row = df[df['zip_code'] == zip_query]
+    # --- SQL DATABASE LOOKUP PIPELINE ---
+    selected_row = query_single_zip(DB_FILENAME, zip_query)
+    
     if selected_row.empty:
         st.error("❌ ZIP Code not found in the regional dataset.")
         st.stop()
